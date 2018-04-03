@@ -1,0 +1,370 @@
+#!/usr/bin/env bash
+#
+# uu - USB Utilities for Linux
+# Copyright (c) 2018 Koichi OKADA. All rights reserved.
+# This script is destributed under the MIT license.
+#
+
+(( 5 <= DEBUG )) && set -x
+
+
+
+shopt -s extglob
+
+
+
+function init_SGR ()
+{
+  if [ -n "$COLORIZE" ]; then
+    SGR_reset="\e[0m"
+    SGR_bold="\e[1m"
+    SGR_fg_red="\e[31m"
+    SGR_fg_green="\e[32m"
+    SGR_fg_yellow="\e[33m"
+    SGR_fg_blue="\e[34m"
+    SGR_fg_magenta="\e[35m"
+  else
+    unset SGR_reset SGR_bold SGR_red SGR_green SGR_yellow SGR_blue SGR_magenta
+  fi
+  FATAL_COLOR="${SGR_fg_magenta}${SGR_bold}"
+  ERROR_COLOR="${SGR_fg_red}${SGR_bold}"
+  WARNING_COLOR="${SGR_fg_yellow}${SGR_bold}"
+  INFO_COLOR="${SGR_fg_green}${SGR_bold}"
+  DEBUG_COLOR="${SGR_fg_blue}${SGR_bold}"
+}
+
+
+
+function abort () #= [EXITCODE]
+{
+  dump_callstack 2
+  exit "$@"
+}
+
+function dump_callstack () #= [N]
+#? N is a depth to skip the callstack.
+#? $CALLSTACK_SKIP is depth to skip the callstack too.
+#? N and CALLSTACK_SKIP is summed before skipping.
+#? The default value is N = 1 and CALLSTACK_SKIP = 0.
+{
+  local i
+  echo "Callstack:"
+  for i in `seq "$(( ${#FUNCNAME[@]} - 1 ))" -1 $(( ${1:-1} + ${CALLSTACK_SKIP:-0} ))`; do
+    echo -e "\t${BASH_SOURCE[0]}: ${FUNCNAME[$i]}: ${BASH_LINENO[$((${i}-1))]}"
+  done
+} #/dump_callstack
+
+function fatal () #= [MESSAGES ...]
+{
+  echo -e "${FATAL_COLOR}Fatal:${SGR_reset} $@"
+} >&2 #/fatal
+
+function error () #= [MESSAGES ...]
+{
+  (( 0 <= VERBOSE )) && echo -e "${ERROR_COLOR}Error:${SGR_reset} $@"
+} >&2 #/error
+
+function warning () #= [MESSAGES ...]
+{
+  (( 1 <= VERBOSE )) && echo -e "${WARNING_COLOR}Warning:${SGR_reset} $@"
+} >&2 #/warning
+
+function info () #= [MESSAGES ...]
+{
+  (( 2 <= VERBOSE )) && echo -e "${INFO_COLOR}Info:${SGR_reset} $@"
+} >&2 #/info
+
+function debug () #= [MESSAGES ...]
+{
+  (( 3 <= VERBOSE )) && echo -e "${DEBUG_COLOR}Debug:${SGR_reset} $@"
+} >&2 #/info
+
+
+
+function optparse_default () #= [ARGS ...]
+# 
+{
+  ARGS=()
+  while (( 0 < $# )); do
+    case "$1" in
+      -h|--help)
+        OPT_HELP="$1"
+        shift
+        ;;
+      -*)
+        OPTS+=( "$1" )
+        shift
+        ;;
+      *)
+        if [ -z "$has_subcommand" ]; then
+          ARGS+=( "$1" )
+          shift
+        else
+          ARGS+=( "$@" )
+          shift $#
+        fi
+        ;;
+    esac
+  done
+}
+
+function usage_default () #= [CMD]
+#   Auto generate default usage from documentation
+# Args:
+#   CMD : Whole name of subcommand 
+{
+  local lines
+  readarray -t lines < <(
+    cat "${BASH_SOURCE[0]}" \
+    | grep -nE "^function +${1:-$CMD} +\( *\)|^{" \
+    | grep -A1 -E "^[0-9]+:function +${1:-$CMD} +\( *\)" \
+    | sed -r -e 's/^([0-9]+).*/\1/g')
+  cat "${BASH_SOURCE[0]}" \
+  | head -n+$(( lines[1] - 1 )) \
+  | tail -n+$(( lines[0] )) \
+  | sed -r -e 's/^function +([^ ]+)[^#]*(#=? *(.*))?/Usage: \1 \3/g' \
+           -e 's/^#\?? (.*)/\1/g'
+}
+
+function invoke_command () #= [ARGS ...]
+#   Invoke subcommand
+# Args:
+#   CMD    : Name of parent command
+#   ARGS   : Arguments for subcommand
+{
+  local ARGS CMD="${CMD:-${BASECMD:-${0##*/}}}" OPTS cmdtype
+  local -n has_subcommand="has_subcommand_${CMD//-/_}"
+  unset BASECMD
+
+  type -p "init_${CMD}" && "init_${CMD}"
+  
+  if   [ "$(type -t "${CMD//-/_}")" = "function" ]; then
+    CMD="${CMD//-/_}"
+    cmdtype=function
+  elif [ "$(type -t "${CMD//_/-}")" = "file" ]; then
+    CMD="${CMD//_/-}"
+    cmdtype=file
+  elif [ -n "$has_subcommand" ]; then
+    debug "Command not found, but has subcommand: $CMD"
+  else
+    error "Command not found: $CMD"
+    exit 1
+  fi
+  
+  if [ "$cmdtype" = "function" ]; then
+    if type "optparse_${CMD}">&/dev/null; then
+      "optparse_${CMD}" "$@"
+    else
+      "optparse_default" "$@"
+    fi
+    set -- "${ARGS[@]}"
+  fi
+  if [ -n "$has_subcommand" ]; then
+    (( $# <= 0 )) && { invoke_usage; exit; }
+    CMD="${CMD}_$1"
+    invoke_command "${@:2}"
+  else
+    [ -n "$OPT_HELP" ] && { invoke_usage; exit; }
+    "$CMD" "$@"
+  fi
+}
+
+function invoke_usage () #= [CMD]
+{
+  if type "usage_${1:-$CMD}" >&/dev/null; then
+    "usage_${1:-$CMD}"
+  else
+    usage_default "${1:-$CMD}"
+  fi
+}
+
+
+
+function uu_cat () #= [OPTIONS ...] [FILES ...]
+# Options:
+#   Can take any options for cat, but not support taking optional parameters 
+# Args:
+#   FILES : ex) usb6/idVendor, etc,,
+{
+  set -- "${@/#/${USBDEVDIR%/}/}"
+  eval cat "${OPTS[@]}" "${@:-${USBDEVDIR%/}/}"
+}
+
+function uu_ls () #= [OPTIONS ...] [PATHS ...]
+# Options:
+#   Can take any options for ls, but not support taking optional parameters. 
+# Args:
+#   PATHS : ex) usb6, usb6/power, 6-0:1-0, 6-1, etc
+{
+  set -- "${@/#/${USBDEVDIR%/}/}"
+  eval ls "${OPTS[@]}" "${@:-${USBDEVDIR%/}/}"
+}
+
+function uu_realpath () #= [OPTIONS ...] [PATHS ...]
+# Options:
+#   Can take any options for realpath, but not support taking optional parameters. 
+# Args:
+#   PATHS : ex) usb6, usb6/power, 6-0:1-0, 6-1, etc
+{
+  set -- "${@/#/${USBDEVDIR%/}/}"
+  eval realpath "${OPTS[@]}" "${@:-${USBDEVDIR%/}/}"
+}
+
+
+
+function uu_chpower () #= DEV STATE
+#   Change power state
+# Args:
+#   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+#   STATE : (auto|on)
+{
+  local dev="${USBDEVDIR%/}/${1%/}"
+  (( $# != 2 )) && { invoke_usage; exit 1; }
+  [ -e "$dev" ] || { error "Device not found: $1"; exit 1;}
+  case "$2" in
+    auto|off|on) ;;
+    *) error "Unknown state: $2"; exit 1;;
+  esac
+  echo 0 | sudo tee "${dev%/}/power/autosuspend_delay_ms"
+  echo "$2" | sudo tee "${dev%/}/power/control"
+}
+
+function uu_power () #= DEV
+#   Show power state
+# Args:
+#   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  local i dev="${USBDEVDIR%/}/${1%/}"
+  (( $# != 1 )) && { invoke_usage; exit 1; }
+  [ -e "$dev" ] || { error "Device not found: $1"; exit 1;}
+  for i in autosuspend_delay_ms autosuspend control level; do
+    printf "%-20s : " "$i"
+    cat "${dev%/}/power/$i"
+  done
+}
+
+
+
+function uu_bind () #= DRIVER DEV
+#   Unbind device
+# Args:
+#   DRIVER : Choose one of ls-driver result. ex) usb, usb-storage, etc,,,. 
+#   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  local i driver="${USBDRIVERDIR%/}/${1%/}" dev="${USBDEVDIR%/}/${2%/}"
+  (( $# != 2 )) && { invoke_usage; exit 1; }
+  [ -e "${driver%/}/bind" ] || { error "Driver not found: $1"; exit 1;}
+  [ -e "${dev%/}/power" ] || { error "Device not found: $1"; exit 1;}
+  realpath "${driver%/}" | sed -r -e 's:.*/::g'
+  echo "$2" | sudo tee "${driver%/}/bind"
+}
+
+
+
+function uu_ls_bind () #= DEV
+#   List drivers binded to device
+# Args:
+#   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  local i dev="${USBDEVDIR%/}/${1%/}"
+  (( $# != 1 )) && { invoke_usage; exit 1; }
+  [ -e "$dev" ] || { error "Device not found: $1"; exit 1;}
+  {
+    for i in "${dev%/}" "${dev%/}/"+([0-9])-+([0-9]):+([0-9]).+([0-9]); do
+      [ -e "${i%/}/driver" ] || continue
+      printf "%-10s" "${i##*/}"
+      realpath "${i%/}/driver"
+    done
+  } \
+  | sed -r -e 's:[^ ]*/::g'
+}
+
+
+
+function uu_ls_driver () #= [PATHS ...]
+#   List drivers
+# Args:
+#   PATHS  : ex) usb, usb-storage, etc,,,. 
+{
+  set -- "${@/#/${USBDRIVERDIR%/}/}"
+  ls "${OPTS[@]}" "${@:-${USBDRIVERDIR%/}/}"
+}
+
+
+
+function uu_unbind () #= DEV
+#   Unbind driver from device
+# Args:
+#   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  local i dev="${USBDEVDIR%/}/${1%/}"
+  (( $# != 1 )) && { invoke_usage; exit 1; }
+  [ -e "$dev" ] || { error "Device not found: $1"; exit 1;}
+  realpath "${dev%/}/driver" | sed -r -e 's:.*/::g'
+  echo "$1" | sudo tee "${dev%/}/driver/unbind"
+}
+
+
+
+function uu_suspend () #= DEV
+#   Suspend device
+# Args:
+#   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  uu_chpower "$1" auto
+  uu_unbind "$1"
+}
+
+function uu_resume () #= DEV
+#   Suspend device
+# Args:
+#   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  uu_bind usb "$1"
+}
+
+
+
+
+has_subcommand_uu=1
+
+function init_uu ()
+#   Initialize uu
+{
+  : ${VERBOSE:=1}
+  : ${COLORIZE:=1}
+  init_SGR
+  USBDEVDIR=/sys/bus/usb/devices
+  USBDRIVERDIR=/sys/bus/usb/drivers
+}
+
+function usage_uu ()
+{
+  cat<<-EOD
+	Usage: uu [OPTIONS ...] COMMAND [ARGS ...]
+	Commands:
+	  cat [PATHS]        cat attributes
+	  ls [PATHS]         List devices and attributes
+	  realpath [PATHS]   Show realpath
+	  
+	  chpower DEV STATE  Change power state
+	  power [DEV]        Show power state
+	  
+	  bind DRIVER DEV    Bind driver to device
+	  ls-bind [DEV]      List drivers binded to device
+	  ls-driver [PATHS]  List drivers and binds
+	  unbind [DEV]       Unbind driver from device
+	  
+	Options:
+	  -h,--help
+	EOD
+}
+
+function uu ()
+{
+  echo "Dummy of parent command for uu"
+}
+
+
+
+invoke_command "$@"
