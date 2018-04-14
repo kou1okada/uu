@@ -281,6 +281,28 @@ function uu_ls_bind () #= DEV
 
 
 
+function uu_ls_dev () #= [DEVS ...]
+#   List devices
+# Args:
+#   DEVS   : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  local devs i j
+  local cols=( idVendor idProduct serial manufacturer product )
+  readarray -t devs < <( cd "${USBDEVDIR}"; (( $# <= 0 )) && ls || eval ls -d "$@" ) 
+  for i in "${devs[@]}"; do
+    local dev="${USBDEVDIR%/}/${i%/}"
+    [ -e "$dev" ] || warning "Device not found: $i"
+    unset "${cols[@]}"
+    for j in "${cols[@]}"; do
+      [ -e "${dev%/}/${j}" ] || continue
+      local "$j=$(< "${dev%/}/${j}")"
+    done
+    printf "%-10s %-9s %-12s %s %s\n" "$i" "${idVendor}${idProduct:+:}${idProduct}" "$serial" "$manufacturer" "$product"
+  done
+}
+
+
+
 function uu_ls_driver () #= [PATHS ...]
 #   List drivers
 # Args:
