@@ -261,8 +261,8 @@ function uu_bind () #= DRIVER DEV
 
 
 
-function uu_ls_bind () #= DEV
-#   List drivers binded to device
+function uu_ls_bind_children () #= DEV
+#   List drivers binded to device and children
 # Args:
 #   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
 {
