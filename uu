@@ -261,6 +261,24 @@ function uu_bind () #= DRIVER DEV
 
 
 
+function uu_ls_bind () #= [DEVS ...]
+#   List drivers binded to device
+# Args:
+#   DEVS   : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
+{
+  local i dev devs
+  readarray -t devs < <( cd "$USBDEVDIR"; (( $# <= 0 )) && ls || eval ls -d "$@" )
+  for i in "${devs[@]}"; do
+    dev="${USBDEVDIR%/}/${i%/}"
+    [ -e "$dev" ] || { warning "Device not found: $1"; continue; }
+    printf "%-10s" "${i##*/}"
+    [ -e "${dev%/}/driver" ] && realpath "${dev%/}/driver" || echo
+  done \
+  | sed -r -e 's:[^ ]*/::g'
+}
+
+
+
 function uu_ls_bind_children () #= DEV
 #   List drivers binded to device and children
 # Args:
