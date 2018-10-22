@@ -356,7 +356,7 @@ function uu_suspend () #= DEV
 }
 
 function uu_resume () #= DEV
-#   Suspend device
+#   Resume device
 # Args:
 #   DEV    : Choose one of ls result. ex) usb6, 6-0:1-0, 6-1, etc,,,.
 {
