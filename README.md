@@ -7,15 +7,22 @@ Commands:
   cat [PATHS]        cat attributes
   ls [PATHS]         List devices and attributes
   realpath [PATHS]   Show realpath
-
+  
   chpower DEV STATE  Change power state
   power [DEV]        Show power state
-
+  
   bind DRIVER DEV    Bind driver to device
   ls-bind [DEV]      List drivers binded to device
+  ls-bind-children DEV
+                     List drivers binded to device and children
+  ls-dev [DEVS ...]  List devices
   ls-driver [PATHS]  List drivers and binds
+  lsusb [DEVS ...]   List devices with lsusb
   unbind [DEV]       Unbind driver from device
-
+  
+  suspend DEV        Suspend device
+  resume DEV         Resume device
+  
 Options:
   -h,--help
 ~~~
