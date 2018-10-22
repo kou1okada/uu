@@ -392,8 +392,14 @@ function usage_uu ()
 	  
 	  bind DRIVER DEV    Bind driver to device
 	  ls-bind [DEV]      List drivers binded to device
+	  ls-bind-children DEV
+	                     List drivers binded to device and children
+	  ls-dev [DEVS ...]  List devices
 	  ls-driver [PATHS]  List drivers and binds
 	  unbind [DEV]       Unbind driver from device
+	  
+	  suspend DEV        Suspend device
+	  resume DEV         Resume device
 	  
 	Options:
 	  -h,--help
