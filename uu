@@ -332,6 +332,24 @@ function uu_ls_driver () #= [PATHS ...]
 
 
 
+function uu_lsusb () #= [DEVS ...]
+{
+  local vendor product busnum devnum
+  set -- "${@/#/${USBDEVDIR%/}/}"
+  (( $# <= 0 )) && set -- "${USBDEVDIR%/}/"*
+
+  for i in "$@"; do
+    unset vendor product busnum devnum
+    [ -e "${i}/busnum"    ] && busnum="$(cat "${i}/busnum")"
+    [ -e "${i}/devnum"    ] && devnum="$(cat "${i}/devnum")"
+    [ -e "${i}/idVendor"  ] && vendor="$(cat "${i}/idVendor")"
+    [ -e "${i}/idProduct" ] && product="$(cat "${i}/idProduct")"
+    [ -n "$busnum" -a -n "$devnum" ] && echo -e "${i##*/}\t$(lsusb -s "$busnum:$devnum")" || echo "${i##*/}"
+  done
+}
+
+
+
 function uu_unbind () #= DEV
 #   Unbind driver from device
 # Args:
@@ -396,6 +414,7 @@ function usage_uu ()
 	                     List drivers binded to device and children
 	  ls-dev [DEVS ...]  List devices
 	  ls-driver [PATHS]  List drivers and binds
+	  lsusb [DEVS ...]   List devices with lsusb
 	  unbind [DEV]       Unbind driver from device
 	  
 	  suspend DEV        Suspend device
