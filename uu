@@ -350,6 +350,25 @@ function uu_lsusb () #= [DEVS ...]
 
 
 
+function uu_info () # [PATHS ..]
+#   Display infomations
+{
+  local path i
+  for path; do
+    echo "$path"
+    for i in "${USBDEVDIR%/}/$path/"*; do
+      if [ -d "$i" ]; then
+        echo -e "\t${i##*/}/"
+      else
+        echo -e "\t${i##*/}"
+        sed -e 's/^/\t\t/g' "$i"
+      fi
+    done
+  done
+}
+
+
+
 function uu_unbind () #= DEV
 #   Unbind driver from device
 # Args:
@@ -415,6 +434,7 @@ function usage_uu ()
 	  ls-dev [DEVS ...]  List devices
 	  ls-driver [PATHS]  List drivers and binds
 	  lsusb [DEVS ...]   List devices with lsusb
+	  info [PATHS ...]   Display informations
 	  unbind [DEV]       Unbind driver from device
 	  
 	  suspend DEV        Suspend device

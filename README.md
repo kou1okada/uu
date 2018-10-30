@@ -18,6 +18,7 @@ Commands:
   ls-dev [DEVS ...]  List devices
   ls-driver [PATHS]  List drivers and binds
   lsusb [DEVS ...]   List devices with lsusb
+  info [PATHS ...]   Display informations
   unbind [DEV]       Unbind driver from device
   
   suspend DEV        Suspend device
