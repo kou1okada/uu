@@ -1,0 +1,43 @@
+# uu completion
+
+function _uu_subcommands ()
+{
+  local PAT="^function +uu_([^ ]+) *\( *\).*$"
+  cat "$(which uu 2>/dev/null)" \
+  | grep -E "$PAT" \
+  | sed -nre 's/'"$PAT"'/\1/gp' \
+  | sed -re 's/_/-/g'
+}
+
+function _uu ()
+{
+  local USBDEVDIR=/sys/bus/usb/devices/
+  local i cur cur2 prev words cword candidates
+  # Unescaped colon will be completed incorrectly. Not good.
+  #   _get_comp_words_by_ref -n : cur prev words cword
+  # Colon must be escaped, not convenient, but correct, hmm,,,.
+  _get_comp_words_by_ref cur prev words cword
+  # Colon is not required to be escaped.
+  # It's convinient, but affects to environment widly. Not good.
+  #   COMP_WORDBREAKS="${COMP_WORDBREAKS/:/}"
+
+  case $cword in
+  1)
+    COMPREPLY=( $(compgen -W "$(_uu_subcommands)" -- "${cur}" ) )
+    ;;
+  *)
+    candidates=( $(compgen -f -- "${USBDEVDIR}${cur}") )
+    for (( i = 0; i < ${#candidates[@]}; i++ )); do
+      [ -d "${candidates[i]}" ] && candidates[i]+="/"
+    done
+    COMPREPLY=( "${candidates[@]/$USBDEVDIR/}" )
+    COMPREPLY=( $(compgen -W "${COMPREPLY[*]}" -- "${cur}" ) )
+    [ ${#COMPREPLY[@]} -eq 1 -a "${COMPREPLY: -1}" = "/" ] && compopt -o nospace
+    compopt -o filenames
+    ;;
+  esac
+  __ltrim_colon_completions "$cur"
+}
+
+complete -F _uu uu
+
