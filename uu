@@ -369,6 +369,22 @@ function uu_info () # [PATHS ..]
 
 
 
+function uu_ls_blockdevs ()
+#   List block devices
+{
+  local i j blks
+  for i in "${USBDEVDIR%/}/"*; do
+    blks=( "${i}"/host*/target*/*/block/* )
+    [ ! -e "$blks" ] && continue
+    echo "${i##*/}"
+    for j in "${blks[@]}"; do
+      echo -e "\t${j##*/}"
+    done
+  done
+}
+
+
+
 function uu_unbind () #= DEV
 #   Unbind driver from device
 # Args:
@@ -435,6 +451,7 @@ function usage_uu ()
 	  ls-driver [PATHS]  List drivers and binds
 	  lsusb [DEVS ...]   List devices with lsusb
 	  info [PATHS ...]   Display informations
+	  ls-blockdevs       List block devices
 	  unbind [DEV]       Unbind driver from device
 	  
 	  suspend DEV        Suspend device

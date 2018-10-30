@@ -19,6 +19,7 @@ Commands:
   ls-driver [PATHS]  List drivers and binds
   lsusb [DEVS ...]   List devices with lsusb
   info [PATHS ...]   Display informations
+  ls-blockdevs       List block devices
   unbind [DEV]       Unbind driver from device
   
   suspend DEV        Suspend device
